@@ -1,0 +1,3 @@
+interface:
+  display_name: "ZCode + Codex Collaboration"
+  short_description: "Codex plans and reviews; ZCode executes with Git-safe handoffs."
