@@ -3,48 +3,87 @@
 ## Table of contents
 
 1. Requirements
-2. Install in ZCode
-3. Share with another user
-4. First project bootstrap
-5. Optional worktree setup
-6. ZCode automation
+2. Choose install scope
+3. Install in ZCode
+4. Share with another user
+5. First project bootstrap
+6. Optional worktree setup
+7. ZCode automation
 
 ## 1. Requirements
 
 - ZCode with Skills enabled.
 - Git.
 - Codex CLI available as `codex` on PATH and already authenticated/configured.
-- Python 3 for bundled helper scripts (optional but recommended).
+- Python 3 for bundled helper scripts.
 
 No MCP server, database, message queue, or custom daemon is required.
 
-## 2. Install in ZCode
+## 2. Choose install scope
 
-ZCode user-level skills live under:
+This Skill is generic and intended to work across repositories.
 
-```text
-~/.zcode/skills/<skill-name>/SKILL.md
-```
+### Recommended: Global/user-level
 
-Extract/copy this skill directory to:
+Install once at:
 
 ```text
 ~/.zcode/skills/zcode-codex-collaboration/
 ```
 
-Then open **Settings -> Skills**, refresh, enable the skill, and invoke it with:
+Use this for normal personal use across multiple projects.
+
+### Optional: Project-local
+
+Install at:
+
+```text
+<workspace>/.zcode/skills/zcode-codex-collaboration/
+```
+
+Use project-local scope only when:
+
+- the repository intentionally pins a specific Skill version;
+- a team wants the Skill version to travel with that repository;
+- the project uses a fork with project-specific collaboration behavior;
+- global installation is not allowed in the environment.
+
+Do not put the generic Skill into every project merely because the project uses it.
+
+Avoid keeping two independently edited copies (global + project-local). Pick one authoritative installation source.
+
+Project-specific information belongs in the project, not the generic Skill:
+
+- `AGENTS.md`;
+- hooks;
+- execution plan/checkpoints;
+- repository paths;
+- project test/build commands;
+- goal/task IDs.
+
+## 3. Install in ZCode
+
+For a packaged release, extract `skill.zip` so this exists:
+
+```text
+~/.zcode/skills/zcode-codex-collaboration/SKILL.md
+```
+
+Then open **Settings -> Skills**, click **Refresh**, enable the Skill, and invoke:
 
 ```text
 $zcode-codex-collaboration bootstrap this repository
 ```
 
-ZCode can also import skills detected from supported external coding agents. Choose Copy for an independent ZCode copy or Symlink when you intentionally want one shared source.
+If you maintain the Skill in another supported coding agent, ZCode can import it as Copy or Symlink. Choose Global for cross-project use or Project when intentionally scoped to the current workspace.
 
-## 3. Share with another user
+## 4. Share with another user
 
-For one-off sharing, send the skill archive/folder and have the recipient extract it into their user-level ZCode skill directory.
+For one-off sharing, send `skill.zip` or the Skill folder. The recipient should normally install it at user level.
 
-For team distribution, package the skill in a ZCode plugin repository using the flat layout:
+For a GitHub source, clone/download the repository and copy the Skill contents into the ZCode global Skill directory. Do not require the user's application repository to vendor the Skill.
+
+For team distribution, package the Skill in a ZCode plugin repository using the flat layout:
 
 ```text
 skills/zcode-codex-collaboration/SKILL.md
@@ -54,7 +93,7 @@ skills/zcode-codex-collaboration/scripts/...
 
 Do not nest skills under extra grouping directories.
 
-## 4. First project bootstrap
+## 5. First project bootstrap
 
 Invoke:
 
@@ -62,37 +101,38 @@ Invoke:
 $zcode-codex-collaboration bootstrap collaboration for this repo
 ```
 
-The skill should:
+The Skill should:
 
 1. run preflight;
 2. identify current Git root and worktrees;
 3. resolve or ask once for the primary Codex worktree;
 4. inspect existing `AGENTS.md`/project instructions;
-5. add the collaboration contract without overwriting project rules;
+5. preserve project rules and add only missing collaboration rules;
 6. detect the repository's goal/task/checkpoint mechanism;
-7. ask Codex for a current execution plan if needed;
-8. start the plan under the Codex-plans/ZCode-executes/Codex-reviews model.
+7. determine output transport mode (`DIRECT_STREAM` or `INCREMENTAL_LOG_STREAM`);
+8. ask Codex for a current plan/specification if needed;
+9. start under Codex-plans/ZCode-executes/Codex-reviews.
 
-## 5. Optional worktree setup
+## 6. Optional worktree setup
 
 If only one worktree exists and both agents need to modify code concurrently, prefer creating a second worktree before parallel execution.
 
-Example only (adapt branch/path to the project):
+Example only:
 
 ```bash
 git worktree add ../<repo>-zcode -b zcode/execution
 ```
 
-Do not create a worktree when the repository is dirty or the intended branch/path would conflict. If safe inference is impossible, ask the user.
+Adapt the branch/path to the project. Do not create a worktree when the repository is dirty or path/branch safety is ambiguous.
 
-## 6. ZCode automation
+## 7. ZCode automation
 
-The Skill itself is the reusable protocol. A ZCode scheduled automation is optional.
+The Skill is the reusable protocol. A scheduled ZCode automation is optional.
 
-If the user wants unattended periodic continuation, configure an existing/new ZCode automation to invoke the skill against the repository, e.g.:
+If unattended continuation is wanted, keep the automation prompt thin, for example:
 
 ```text
-$zcode-codex-collaboration resume the current repository goal; stop at PASS or BLOCKED
+Use $zcode-codex-collaboration. Resume the repository's current goal from Git/project state. Stop at PASS or BLOCKED.
 ```
 
-Do not embed absolute paths in the shared Skill. Put project paths in project-local configuration or the automation instance.
+Do not duplicate the full Skill rules in the automation prompt. Put project-specific paths in the automation instance or project configuration, not in the shared Skill.
