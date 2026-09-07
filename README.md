@@ -46,102 +46,169 @@ This Skill makes the boundary explicit:
 - Git
 - Codex CLI available as `codex` on `PATH`
 - Codex CLI already authenticated/configured
-- Python 3 for the bundled helper scripts (recommended)
+- Python 3 for the bundled helper scripts
 
-## Install
+## Quick start
 
-Copy or extract this repository into your ZCode user-level Skill directory so that the entrypoint resolves as:
+### 1. Download or clone this repository
+
+```bash
+git clone https://github.com/SBC9966/zcode-and-codex-.git
+```
+
+Or download `dist/skill.zip` directly from this repository.
+
+### 2. Install the Skill into ZCode
+
+Copy or extract the Skill so this file exists:
 
 ```text
 ~/.zcode/skills/zcode-codex-collaboration/SKILL.md
 ```
 
-Then refresh/enable the Skill in ZCode and invoke it with:
+A typical layout is:
+
+```text
+~/.zcode/skills/zcode-codex-collaboration/
+├── SKILL.md
+├── agents/
+├── scripts/
+└── references/
+```
+
+Then refresh/enable the Skill in ZCode.
+
+### 3. Prepare your project
+
+The workflow works best with two Git worktrees:
+
+```text
+project-main/      ← Codex primary worktree
+project-zcode/     ← ZCode execution worktree
+```
+
+Example:
+
+```bash
+git clone <your-repo-url> project-main
+cd project-main
+git worktree add ../project-zcode -b zcode/work main
+```
+
+Use your real default branch (`main`, `master`, `trunk`, etc.) instead of assuming `main`.
+
+### 4. Run the environment preflight
+
+From either worktree:
+
+```bash
+python <skill-dir>/scripts/preflight.py --workspace .
+```
+
+If automatic primary-worktree inference is ambiguous, pass it explicitly:
+
+```bash
+python <skill-dir>/scripts/preflight.py \
+  --workspace . \
+  --primary /path/to/project-main
+```
+
+The preflight checks:
+
+- Git repository state
+- discovered worktrees
+- Codex CLI availability
+- likely primary worktree
+- primary worktree cleanliness
+- whether starting a new Codex production invocation is safe
+
+### 5. Bootstrap collaboration in ZCode
+
+Invoke the Skill in ZCode with a request such as:
 
 ```text
 $zcode-codex-collaboration bootstrap this repository
 ```
 
-You can also download the packaged archive from `dist/skill.zip`.
+Or:
 
-## What the Skill does
-
-### 1. Environment preflight
-
-```bash
-python scripts/preflight.py --workspace .
+```text
+Use zcode-codex-collaboration for this project. Codex should plan and review; ZCode should implement.
 ```
 
-Checks the repository, worktrees, Codex availability, primary-worktree safety, and whether a new Codex production invocation is safe.
+The Skill should adapt to the repository's existing `AGENTS.md`, task files, architecture docs, tests, branches, and worktree layout instead of replacing them.
 
-### 2. Safe Codex invocation
+## Typical daily workflow
+
+Once bootstrapped, the intended loop is:
+
+```text
+1. ZCode reads repository source of truth
+2. Codex creates/updates the execution plan
+3. ZCode selects a ready delegated task
+4. ZCode implements and validates it
+5. ZCode commits the result
+6. Codex reviews the real diff/commit
+7. ZCode repairs if required
+8. Reviewed work is integrated into primary
+9. Continue until the current goal passes
+```
+
+### Example delegated task
+
+A good Codex-authored task should look more like this:
+
+```text
+Task: T003 — Implement AssetSpec validation
+Owner: zcode
+
+Objective:
+Implement the already-decided AssetSpec validation contract.
+
+Allowed files:
+- core/schemas/asset.py
+- tests/unit/test_asset.py
+
+Required behavior:
+- reject duplicate part IDs
+- reject missing relation targets
+- preserve canonical serialization
+
+Non-goals:
+- do not redesign PartGraph
+- do not change public IDs
+
+Validation:
+- pytest tests/unit/test_asset.py -q
+- ruff check core/schemas/asset.py tests/unit/test_asset.py
+
+Definition of Done:
+- all specified cases pass
+- no unrelated files changed
+```
+
+The important rule is that **ZCode should not have to invent the architecture while implementing the task**.
+
+## Safe Codex invocation
+
+The bundled runner launches Codex in a specific primary worktree and verifies the actual startup header.
 
 ```bash
-python scripts/run_codex.py \
-  --workdir <primary-worktree> \
-  --prompt-file <bounded-task.md> \
+python <skill-dir>/scripts/run_codex.py \
+  --workdir /path/to/project-main \
+  --prompt-file /path/to/bounded-task.md \
   --effort high \
-  --log <task.log>
+  --log /path/to/task.log
 ```
 
-The runner verifies the **actual Codex startup header**, including the working directory and requested reasoning effort, instead of trusting configuration files or self-reports.
-
-### 3. Repository-owned execution plan
-
-Codex produces a bounded execution plan with:
-
-- task IDs
-- owners (`zcode` or `codex`)
-- dependencies
-- allowed files/modules
-- required interfaces and behavior
-- invariants and constraints
-- tests and validation commands
-- Definition of Done
-- expected commit scope
-
-ZCode executes only ready tasks whose design is sufficiently specified.
-
-### 4. Ambiguity escalation
-
-If implementation still requires a high-level engineering choice, ZCode records:
+The runner checks the reported:
 
 ```text
-NEEDS_CODEX_DECISION
+workdir: ...
+reasoning effort: ...
 ```
 
-Codex resolves the decision or strengthens the specification, then ZCode continues.
-
-### 5. Review and bounded repair
-
-```text
-Codex specification
-    ↓
-ZCode implementation
-    ↓
-Mechanical validation
-    ↓
-Codex engineering review
-    ↓
-PASS / FIX_REQUIRED / TAKEOVER / BLOCKED
-```
-
-Automatic repair is bounded to two cycles before Codex decides whether to take over or mark the work blocked.
-
-### 6. Safe interruption recovery
-
-A timeout, provider disconnect, stopped UI, or machine restart is not automatically a task failure.
-
-The Skill first checks:
-
-- running process state
-- primary `HEAD`
-- `git status`
-- diff
-- recent commits
-- valid partial work
-
-Then it classifies the task as completed, partial, not started, still running, or ambiguous before deciding whether to resume/re-dispatch.
+If the runtime does not match the requested configuration, the invocation is rejected instead of silently continuing.
 
 ## Reasoning policy
 
@@ -150,6 +217,18 @@ Default Codex effort:
 ```text
 high
 ```
+
+Use `high` for most work:
+
+- Goal planning
+- task decomposition
+- specifications
+- API/schema/interface design
+- ordinary architecture interpretation
+- ambiguity resolution
+- engineering review
+- repair specification
+- integration planning
 
 Use `ultra` only for explicit escalation, such as:
 
@@ -160,13 +239,166 @@ Use `ultra` only for explicit escalation, such as:
 - repeated repair failure
 - final formal Goal engineering review
 
-This keeps the collaboration practical on latency and token cost while preserving stronger reasoning where it materially changes engineering decisions.
+This keeps the workflow practical on latency and token cost while preserving stronger reasoning where it materially changes engineering decisions.
+
+## Ambiguity handling
+
+If ZCode reaches a point where it would need to decide any of the following:
+
+- public API shape
+- schema shape
+- architecture boundary
+- dependency choice
+- data relationship semantics
+- error taxonomy
+- compatibility strategy
+- major trade-off
+
+it should record:
+
+```text
+NEEDS_CODEX_DECISION
+```
+
+Then Codex should return a decision or strengthen the task specification.
+
+The workflow should be:
+
+```text
+unclear implementation point
+    ↓
+NEEDS_CODEX_DECISION
+    ↓
+Codex decision / updated specification
+    ↓
+ZCode continues implementation
+```
+
+## Review and repair
+
+Meaningful production work should be reviewed by Codex after ZCode has performed mechanical validation.
+
+```text
+Codex specification
+    ↓
+ZCode implementation
+    ↓
+pytest / ruff / mypy / project validation
+    ↓
+ZCode commit
+    ↓
+Codex engineering review
+```
+
+Codex verdicts:
+
+- `PASS`
+- `FIX_REQUIRED`
+- `TAKEOVER`
+- `BLOCKED`
+
+Automatic repair is bounded to two cycles.
+
+After two failed repair cycles, Codex should decide whether direct takeover is justified or whether the task should be marked blocked.
+
+Small related fixtures/tests/docs may be grouped into a single review batch to avoid wasting Codex latency and reasoning tokens.
+
+## Interruption and timeout recovery
+
+Do not treat a timeout as proof that Codex failed.
+
+If ZCode sees:
+
+- task-output timeout
+- UI stopped
+- provider disconnect
+- machine restart
+
+first inspect:
+
+```bash
+git -C <primary-worktree> log --oneline -5
+git -C <primary-worktree> status --short
+git -C <primary-worktree> diff
+```
+
+Also inspect whether the Codex process is still running when possible.
+
+Then classify the interrupted task as one of:
+
+```text
+COMPLETED
+PARTIAL
+NOT_STARTED
+STILL_RUNNING
+AMBIGUOUS
+```
+
+Only after classification should the task be resumed or re-dispatched.
+
+Never blindly re-run a timed-out Codex task, because the first invocation may already have created valid work or committed it.
+
+See `references/recovery.md` for the full recovery decision tree.
+
+## Git integration model
+
+Recommended flow:
+
+```text
+Codex specification
+    ↓
+ZCode branch implementation
+    ↓
+ZCode commit
+    ↓
+Codex review of that commit
+    ↓
+PASS
+    ↓
+reviewed cherry-pick / merge into primary
+    ↓
+ZCode rebase/sync to latest primary
+```
+
+Do not manually copy files between the two worktrees.
+
+## Repository-owned source of truth
+
+The Skill does not require every project to use the same folder layout.
+
+It looks for the repository's own source of truth, which may include:
+
+- `AGENTS.md`
+- architecture documents
+- goal/task packages
+- checkpoints
+- `docs/runtime/CURRENT_EXECUTION_PLAN.md`
+- issues or project task files
+
+When the project already has its own conventions, preserve them.
+
+Do not overwrite an existing `AGENTS.md` wholesale just to install this workflow.
+
+## What not to do
+
+Avoid these anti-patterns:
+
+- running Codex and ZCode in the same writable worktree
+- letting ZCode make silent architecture decisions
+- giving ZCode vague tasks such as "implement the whole feature"
+- using `ultra` for every Codex call
+- re-running timed-out Codex calls without checking Git state
+- trusting an agent's claimed commit hash without verifying Git
+- manually copying files between worktrees
+- building Redis/queues/supervisors/databases merely to coordinate these two agents
+- letting Codex become the routine implementation worker again
 
 ## Repository structure
 
 ```text
 .
 ├── README.md
+├── LICENSE
 ├── SKILL.md
 ├── agents/
 │   └── openai.yaml
@@ -174,7 +406,6 @@ This keeps the collaboration practical on latency and token cost while preservin
 │   ├── preflight.py
 │   └── run_codex.py
 ├── references/
-│   ├── api_reference.md
 │   ├── collaboration-contract.md
 │   ├── execution-plan.md
 │   ├── install-and-bootstrap.md
@@ -194,8 +425,14 @@ The Skill deliberately does **not** hard-code:
 - automation IDs
 - model providers
 
-Each project keeps its own source of truth in Git and adapts the collaboration protocol to its existing `AGENTS.md`, task/goal files, tests, and worktree layout.
+Each project keeps its own source of truth in Git and adapts the collaboration protocol to its existing instructions and tooling.
 
 ## Status
 
-Early reusable version extracted from a real ZCode + Codex CLI collaboration workflow. Treat it as an engineering protocol that should be tested against multiple repositories and iterated from real failures.
+Early reusable version extracted from a real ZCode + Codex CLI collaboration workflow. It is intentionally small and Git-native rather than a new multi-agent orchestration platform.
+
+The best way to improve it is to test it against unrelated repositories and convert recurring failure patterns into tighter specifications, validation rules, and recovery logic.
+
+## License
+
+MIT License. See [`LICENSE`](./LICENSE).
